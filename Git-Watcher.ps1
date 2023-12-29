@@ -14,9 +14,7 @@ Write-Host
 $git = Get-Command -Name git -ErrorAction SilentlyContinue
 
 if (!$git) {
-    Write-Error -Message 'Git is not installed on your system.' -Category NotInstalled
-    Read-Host
-    Exit 127
+    Write-Error -Message 'Git is not installed on your system.' -Category NotInstalled -ErrorAction Stop
 }
 
 Write-Verbose -Message "Git found: $($git.Source)"
@@ -32,7 +30,6 @@ $folderDialog.Description = 'Choose a folder to watch for changes.'
 
 if (!($folderDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK)) {
     Write-Host -ForegroundColor DarkRed 'Cancelled. Have a nice day...'
-    Read-Host
     Exit
 }
 

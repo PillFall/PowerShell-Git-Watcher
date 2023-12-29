@@ -5,3 +5,18 @@ Write-Host -ForegroundColor DarkGreen '| |_| | | |_    \ V  V / (_| | || (__| | 
 Write-Host -ForegroundColor DarkGreen ' \____|_|\__|    \_/\_/ \__,_|\__\___|_| |_|\___|_|   '
 Write-Host
 Write-Host
+
+
+
+
+
+# Check if git is installed on the system
+$git = Get-Command -Name git -ErrorAction SilentlyContinue
+
+if (!$git) {
+    Write-Error -Message 'Git is not installed on your system.' -Category NotInstalled
+    Read-Host
+    Exit 127
+}
+
+Write-Verbose -Message "Git found: $($git.Source)"

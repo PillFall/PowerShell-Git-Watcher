@@ -11,13 +11,13 @@ Write-Host
 
 
 # Check if git is installed on the system
-$git = Get-Command -Name git -ErrorAction SilentlyContinue
+$global:git = Get-Command -Name git -ErrorAction SilentlyContinue
 
-if (!$git) {
+if (!$global:git) {
     Write-Error -Message 'Git is not installed on your system.' -Category NotInstalled -ErrorAction Stop
 }
 
-Write-Verbose -Message "Git found: $($git.Source)"
+Write-Verbose -Message "Git found: $($global:git.Source)"
 
 
 
@@ -25,15 +25,15 @@ Write-Verbose -Message "Git found: $($git.Source)"
 
 # Ask the user for the folder to watch
 Add-Type -AssemblyName System.Windows.Forms
-$folderDialog = New-Object -TypeName System.Windows.Forms.FolderBrowserDialog
-$folderDialog.Description = 'Choose a folder to watch for changes.'
+$global:folderDialog = New-Object -TypeName System.Windows.Forms.FolderBrowserDialog
+$global:folderDialog.Description = 'Choose a folder to watch for changes.'
 
-if ($folderDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+if ($global:folderDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
     Write-Host -ForegroundColor DarkRed 'Cancelled. Have a nice day...'
     Exit
 }
 
-$gitTopLevel = Resolve-Path (& $git.Source -C $folderDialog.SelectedPath rev-parse --show-toplevel 2>&1 | Out-String).Trim()
+$gitTopLevel = Resolve-Path (& $global:git.Source -C $global:folderDialog.SelectedPath rev-parse --show-toplevel 2>&1 | Out-String).Trim() -ErrorAction SilentlyContinue
 
 if ($LastExitCode -ne 0) {
     switch (
@@ -48,18 +48,60 @@ if ($LastExitCode -ne 0) {
         )
     ) {
         0 {
-            Write-Host -ForegroundColor Blue (& $git.Source -C $folderDialog.SelectedPath init 2>&1 | Out-String).Trim()
+            Write-Host -ForegroundColor Blue (& $global:git.Source -C $global:folderDialog.SelectedPath init 2>&1 | Out-String).Trim()
         }
         1 {
-            Write-Error -Message "$($folderDialog.SelectedPath) is not a git repository." -Category NotEnabled -ErrorAction Stop
+            Write-Error -Message "$($global:folderDialog.SelectedPath) is not a git repository." -Category NotEnabled -ErrorAction Stop
         }
     }
 
 }
 else {
-    if ($gitTopLevel.Path -ne $folderDialog.SelectedPath) {
-        Write-Error -Message "The folder $($folderDialog.SelectedPath) is not the git toplevel folder. Use $($gitTopLevel.Path) instead." -Category InvalidArgument -ErrorAction Stop
+    if ($gitTopLevel.Path -ne $global:folderDialog.SelectedPath) {
+        Write-Error -Message "The folder $($global:folderDialog.SelectedPath) is not the git toplevel folder. Use $($gitTopLevel.Path) instead." -Category InvalidArgument -ErrorAction Stop
     }
 }
 
-Write-Host -ForegroundColor Cyan "Started to Watch $($folderDialog.SelectedPath)"
+
+
+
+
+$watcher = New-Object -TypeName System.IO.FileSystemWatcher
+$watcher.Path = $global:folderDialog.SelectedPath
+$watcher.IncludeSubdirectories = $true
+$watcher.EnableRaisingEvents = $true
+
+$CommitChangesToGit = {
+    if ($Event.SourceEventArgs.Name -match '^.git/?.*') {
+        Return
+    }
+
+    if (Test-Path -Path $Event.SourceEventArgs.FullPath -PathType Container) {
+        Return
+    }
+
+    Write-Host "[$($Event.TimeGenerated)] $($Event.SourceEventArgs.Name) $($Event.SourceEventArgs.ChangeType)"
+    & $global:git.Source -C $global:folderDialog.SelectedPath add $Event.SourceEventArgs.Name
+    & $global:git.Source -C $global:folderDialog.SelectedPath commit -m "$($Event.SourceEventArgs.Name) $($Event.SourceEventArgs.ChangeType)"
+}
+
+Register-ObjectEvent -InputObject $watcher -EventName 'Created' -Action $CommitChangesToGit | Out-Null
+Register-ObjectEvent -InputObject $watcher -EventName 'Changed' -Action $CommitChangesToGit | Out-Null
+Register-ObjectEvent -InputObject $watcher -EventName 'Renamed' -Action $CommitChangesToGit | Out-Null
+Register-ObjectEvent -InputObject $watcher -EventName 'Deleted' -Action $CommitChangesToGit | Out-Null
+
+Write-Host -ForegroundColor Cyan "Started to Watch $($global:folderDialog.SelectedPath)"
+
+try {
+    while ($true) {
+        & $global:git.Source -C $global:folderDialog.SelectedPath rev-parse 2>&1 | Out-Null
+        if (!(Test-Path -Path $global:folderDialog.SelectedPath -PathType Container) -or $LastExitCode -ne 0) {
+            Exit
+        }
+        Start-Sleep -Seconds 10
+    }
+}
+finally {
+    $watcher.Dispose()
+    Write-Host -ForegroundColor DarkRed 'Stopping...'
+}

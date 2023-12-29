@@ -28,9 +28,38 @@ Add-Type -AssemblyName System.Windows.Forms
 $folderDialog = New-Object -TypeName System.Windows.Forms.FolderBrowserDialog
 $folderDialog.Description = 'Choose a folder to watch for changes.'
 
-if (!($folderDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK)) {
+if ($folderDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
     Write-Host -ForegroundColor DarkRed 'Cancelled. Have a nice day...'
     Exit
+}
+
+$gitTopLevel = Resolve-Path (& $git.Source -C $folderDialog.SelectedPath rev-parse --show-toplevel 2>&1 | Out-String).Trim()
+
+if ($LastExitCode -ne 0) {
+    switch (
+        $host.UI.PromptForChoice(
+            'Not a Git repository',
+            'Want to create a new repository?',
+            @(
+                [System.Management.Automation.Host.ChoiceDescription]::new("&Yes", "Create a new repository and continue.")
+                [System.Management.Automation.Host.ChoiceDescription]::new("&No", "Cancel the creation and stops.")
+            ),
+            0
+        )
+    ) {
+        0 {
+            Write-Host -ForegroundColor Blue (& $git.Source -C $folderDialog.SelectedPath init 2>&1 | Out-String).Trim()
+        }
+        1 {
+            Write-Error -Message "$($folderDialog.SelectedPath) is not a git repository." -Category NotEnabled -ErrorAction Stop
+        }
+    }
+
+}
+else {
+    if ($gitTopLevel.Path -ne $folderDialog.SelectedPath) {
+        Write-Error -Message "The folder $($folderDialog.SelectedPath) is not the git toplevel folder. Use $($gitTopLevel.Path) instead." -Category InvalidArgument -ErrorAction Stop
+    }
 }
 
 Write-Host -ForegroundColor Cyan "Started to Watch $($folderDialog.SelectedPath)"

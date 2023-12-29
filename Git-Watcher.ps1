@@ -94,11 +94,7 @@ Write-Host -ForegroundColor Cyan "Started to Watch $($global:folderDialog.Select
 
 try {
     while ($true) {
-        & $global:git.Source -C $global:folderDialog.SelectedPath rev-parse 2>&1 | Out-Null
-        if (!(Test-Path -Path $global:folderDialog.SelectedPath -PathType Container) -or $LastExitCode -ne 0) {
-            Exit
-        }
-        Start-Sleep -Seconds 10
+        #
     }
 }
 finally {
